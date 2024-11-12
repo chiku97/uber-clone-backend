@@ -1,44 +1,58 @@
 const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const http = require('http');
-const socketIo = require('socket.io');
-const dotenv = require('dotenv');
+const http = require('http'); // To create an HTTP server
+const socketIo = require('socket.io'); // Socket.IO package
 const connectDB = require('./config/db');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const riderRoutes = require('./routes/riderRoutes');
+const cors = require('cors');
 
-dotenv.config();
 const app = express();
+
+// Create an HTTP server and pass the Express app
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: { origin: "*" }
-});
+
+// Initialize Socket.IO with the HTTP server
+const io = socketIo(server);
+
+// Middleware to parse JSON request bodies
+app.use(express.json());
+
+// Middleware to enable CORS (Cross-Origin Resource Sharing)
+app.use(cors());
 
 // Connect to MongoDB
 connectDB();
 
-app.use(cors());
-app.use(express.json());
-
 // Routes
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/riders', require('./routes/riderRoutes'));
+app.use('/api/auth', authRoutes);  // Authentication routes (register/login)
+app.use('/api/users', userRoutes); // User-related routes
+app.use('/api/riders', riderRoutes); // Rider-related routes
 
-// Socket.IO: Listen for location updates
+// Socket.IO Event Handlers
 io.on('connection', (socket) => {
-    console.log('New client connected:', socket.id);
+    console.log('A user connected');
 
-    socket.on('updateLocation', ({ id, latitude, longitude, type }) => {
-        // Broadcast updated location to clients
-        socket.broadcast.emit('locationUpdate', { id, latitude, longitude, type });
+    // Listen for 'locationUpdate' events from the client
+    socket.on('locationUpdate', (data) => {
+        console.log('Location Update:', data);
+        
+        // Emit the location update to all connected clients (broadcasting)
+        // You could also emit it to a specific user or room based on your use case
+        socket.broadcast.emit('locationUpdate', data); // This broadcasts to everyone except the sender
+        
+        // Optionally, send an acknowledgment back to the sender
+        socket.emit('locationUpdateSuccess', { message: 'Location updated successfully!' });
     });
 
+    // Listen for disconnection
     socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+        console.log('A user disconnected');
     });
 });
 
-// Start the server
-const PORT = process.env.PORT || 5000;
+// Server setup
+const PORT = process.env.PORT;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
